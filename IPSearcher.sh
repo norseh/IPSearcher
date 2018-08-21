@@ -34,14 +34,14 @@ echo $RANGE172 >> $RANGEALL
 echo $RANGE10 >> $RANGESLOW
 echo $RANGE10 >> $RANGEALL
 
-#dhclient $INTERFACE
+dhclient $INTERFACE
 ethtool -p $INTERFACE 5
 ADDRESS=$(ifconfig $INTERFACE | grep -i inet | awk '{print $2}')
 APIPA=$(ifconfig $INTERFACE | grep -i inet | awk '{print $2}'| cut -d "." -f 1)
 
 if [[ ($APIPA == "169") || ($ADDRESS == "" ) ]]; then
   ifconfig $INTERFACE 0.0.0.0
-  arp-scan -f $RANGEFAST -B 7M -g -I $INTERFACE -q | awk '{print $1}' | tee $TEMPARP 
+  arp-scan -f $RANGEALL -B 7M -g -I $INTERFACE -q | awk '{print $1}' | tee $TEMPARP
   cat $TEMPARP | grep "\." | awk -F "." '{print $1"."$2"."$3}' | uniq >> $RANGESDETECTED
   cat $TEMPARP | grep "\." >> $IPSDETECTED
   while read line; do
@@ -58,7 +58,7 @@ if [[ ($APIPA == "169") || ($ADDRESS == "" ) ]]; then
       LAST=$(shuf -i 1-254 -n 1)
       TEMPIP="$line.$LAST"
       if [ $(cat $IPSDETECTED | grep -i $TEMPIP -c) -eq 0 ]; then VALID=1; fi
-    done 
+    done
   done < $RANGESDETECTED
   # ATRIBUIR endereço IP
   ifconfig $INTERFACE $TEMPIP/24
