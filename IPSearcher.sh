@@ -48,6 +48,7 @@ if [[ ($APIPA == "169") || ($ADDRESS == "" ) ]]; then
   fi
 cat $TEMPARP | grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)" | awk -F "." '{print $1"."$2"."$3}' | uniq >> $RANGESDETECTED
   cat $TEMPARP | grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)" >> $IPSDETECTED
+  VALID=0
   while read line; do
     #Method 1 - complete range
     #SEQ=$(1 254)
@@ -57,12 +58,15 @@ cat $TEMPARP | grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-
     #done
     #
     #Method 2 - random address
-    VALID=0
     while [ $VALID -ne 1 ]; do
       LAST=$(shuf -i 1-254 -n 1)
       TEMPIP="$line.$LAST"
-      if [ $(cat $IPSDETECTED | grep -i $TEMPIP -c) -eq 0 ]; then VALID=1; fi
+      if [ $(cat $IPSDETECTED | grep -i $TEMPIP -c) -eq 0 ]; then
+        VALID=1
+        break
+      fi
     done
+    if [[ $VALID -eq 1 ]]; then break; fi
   done < $RANGESDETECTED
   # ATRIBUIR endereço IP
   ifconfig $INTERFACE $TEMPIP/24
@@ -75,7 +79,7 @@ cat $TEMPARP | grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-
   #  fi
   #done < $IPSDETECTED
   echo "IP Temp: $TEMPIP"
-  GW=$(nmap -sn $TEMPIP/22 --script ip-forwarding --script-args='target=8.8.8.8' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}')
+  GW=$(nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=8.8.8.8' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}')
   echo "DEFAUT GW: $GW"
   ip route add default via $GW
 fi
