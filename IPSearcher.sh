@@ -30,20 +30,24 @@ echo $RANGE192 >> $RANGESLOW
 echo $RANGE192 >> $RANGESALL
 echo $RANGE172 >> $RANGEFAST
 echo $RANGE172 >> $RANGESLOW
-echo $RANGE172 >> $RANGEALL
+echo $RANGE172 >> $RANGESALL
 echo $RANGE10 >> $RANGESLOW
-echo $RANGE10 >> $RANGEALL
+echo $RANGE10 >> $RANGESALL
 
-dhclient $INTERFACE
-ethtool -p $INTERFACE 5
-ADDRESS=$(ifconfig $INTERFACE | grep -i inet | awk '{print $2}')
-APIPA=$(ifconfig $INTERFACE | grep -i inet | awk '{print $2}'| cut -d "." -f 1)
+#dhclient $INTERFACE
+#ethtool -p $INTERFACE 5
+ADDRESS=$(ifconfig $INTERFACE | grep -i "inet " | awk '{print $2}')
+APIPA=$(ifconfig $INTERFACE | grep -i "inet " | awk '{print $2}'| cut -d "." -f 1)
 
 if [[ ($APIPA == "169") || ($ADDRESS == "" ) ]]; then
   ifconfig $INTERFACE 0.0.0.0
-  arp-scan -f $RANGEALL -B 7M -g -I $INTERFACE -q | awk '{print $1}' | tee $TEMPARP
-  cat $TEMPARP | grep "\." | awk -F "." '{print $1"."$2"."$3}' | uniq >> $RANGESDETECTED
-  cat $TEMPARP | grep "\." >> $IPSDETECTED
+  timeout 5m netdiscover -P | tee $TEMPARP
+  NUMBERIPS=$(grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)" $TEMPARP | wc -l)
+  if [[ $NUMBERIPS -lt 1 ]]; then
+    arp-scan -f $RANGESALL -B 7M -g -I $INTERFACE -q | awk '{print $1}' | tee $TEMPARP
+  fi
+cat $TEMPARP | grep grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)" | awk -F "." '{print $1"."$2"."$3}' | uniq >> $RANGESDETECTED
+  cat $TEMPARP | grep -E -o grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)" >> $IPSDETECTED
   while read line; do
     #Method 1 - complete range
     #SEQ=$(1 254)
@@ -71,7 +75,7 @@ if [[ ($APIPA == "169") || ($ADDRESS == "" ) ]]; then
   #  fi
   #done < $IPSDETECTED
   echo "IP Temp: $TEMPIP"
-  GW=$(nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=8.8.8.8' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}')
+  GW=$(nmap -sn $TEMPIP/22 --script ip-forwarding --script-args='target=8.8.8.8' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}')
   echo "DEFAUT GW: $GW"
   route add default gw $GW
 fi
