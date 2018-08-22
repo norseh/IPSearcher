@@ -34,14 +34,14 @@ echo $RANGE172 >> $RANGESALL
 echo $RANGE10 >> $RANGESLOW
 echo $RANGE10 >> $RANGESALL
 
-#dhclient $INTERFACE
+dhclient $INTERFACE
 #ethtool -p $INTERFACE 5
 ADDRESS=$(ifconfig $INTERFACE | grep -i "inet " | awk '{print $2}')
 APIPA=$(ifconfig $INTERFACE | grep -i "inet " | awk '{print $2}'| cut -d "." -f 1)
 
 if [[ ($APIPA == "169") || ($ADDRESS == "" ) ]]; then
   ifconfig $INTERFACE 0.0.0.0
-  timeout 5m netdiscover -P | tee $TEMPARP
+  timeout 3m netdiscover -P | tee $TEMPARP
   NUMBERIPS=$(grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)" $TEMPARP | wc -l)
   if [[ $NUMBERIPS -lt 1 ]]; then
     arp-scan -f $RANGESALL -B 7M -g -I $INTERFACE -q | awk '{print $1}' | tee $TEMPARP
@@ -77,5 +77,5 @@ cat $TEMPARP | grep grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]
   echo "IP Temp: $TEMPIP"
   GW=$(nmap -sn $TEMPIP/22 --script ip-forwarding --script-args='target=8.8.8.8' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}')
   echo "DEFAUT GW: $GW"
-  route add default gw $GW
+  ip route add default via $GW
 fi
