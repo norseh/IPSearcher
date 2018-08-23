@@ -17,7 +17,7 @@ RANGESDETECTED="/tmp/rangesDETECTED.txt"
 IPSDETECTED="/tmp/ipsDETECTED.txt"
 GWLIST="/tmp/gwLIST.txt"
 
-# Deletes the temp file with rapid networks (ARP resolution)
+# Deletes the temp files
 if [ -f $RANGEFAST ]; then rm -rf $RANGEFAST; fi
 if [ -f $RANGESLOW ]; then rm -rf $RANGESLOW; fi
 if [ -f $RANGESALL ]; then rm -rf $RANGESALL; fi
@@ -36,78 +36,78 @@ echo $RANGE172 >> $RANGESALL
 echo $RANGE10 >> $RANGESLOW
 echo $RANGE10 >> $RANGESALL
 
+# Simpliest method is try dhcp (obviously)
 dhclient $INTERFACE
-#ethtool -p $INTERFACE 5
+
+# DHCP works?
 ADDRESS=$(ifconfig $INTERFACE | grep -i "inet " | awk '{print $2}')
 APIPA=$(ifconfig $INTERFACE | grep -i "inet " | awk '{print $2}'| cut -d "." -f 1)
-
 if [[ ($APIPA == "169") || ($ADDRESS == "" ) ]]; then
+
+  # If APIPA or none address is detected, the active scan for an address is started
   ifconfig $INTERFACE 0.0.0.0
+
+  # Collecting arp resolution for a short range of time
   timeout 3m netdiscover -S -f -i $INTERFACE -P | tee $TEMPARP
   NUMBERIPS=$(grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)" $TEMPARP | wc -l)
+
+  # If any IP address was detected the longest way is activated (scan full RFC1918)
   if [[ $NUMBERIPS -lt 1 ]]; then
     arp-scan -f $RANGESALL -B 7M -g -I $INTERFACE -q | awk '{print $1}' | tee $TEMPARP
   fi
   cat $TEMPARP | grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)" | awk -F "." '{print $1"."$2"."$3}' | uniq >> $RANGESDETECTED
   cat $TEMPARP | grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)" >> $IPSDETECTED
+
+  # Start checking for an unused IP address in the range detected
   VALID=0
-  while read line; do
-    #Method 1 - complete range
-    #SEQ=$(1 254)
-    #
-    #for i in $SEQ; do
-    #  a
-    #done
-    #
-    #Method 2 - random address
+  while read LINERANGES; do
     while [ $VALID -ne 1 ]; do
       LAST=$(shuf -i 1-254 -n 1)
-      TEMPIP="$line.$LAST"
+      TEMPIP="$LINERANGES.$LAST"
       if [ $(cat $IPSDETECTED | grep -i $TEMPIP -c) -eq 0 ]; then
-        VALID=1
+        VALID=1 # Unused IP address was detected
         break
       fi
     done
+
+    # If exist only one IP address (mac resolution) recognized, so we can
+    # presume that this is the correct network to search an default gateway
     if [[ $VALID -eq 1 ]]; then break; fi
-  done < $RANGESDETECTED
-  # ATRIBUIR endereço IP
-  ifconfig $INTERFACE $TEMPIP/24
-  #Gateway detection
-  #while read line; do
-  #  GW=$(nmap -sn $line --script ip-forwarding --script-args='target=8.8.8.8' | grep -i " has ip ")
-  #  if [[ $GW != "" ]]; then
-  #    route add default gw $line
-  #    echo "DEFAUT GW: $line"
-  #  fi
-  #done < $IPSDETECTED
-  echo "IP Temp: $TEMPIP"
-  NUMBERGW=0
-  while [ $NUMBERGW -eq 0 ]; do
-    nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=8.8.8.8' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
-    nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=9.9.9.9' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
-    nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=1.1.1.1' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
-    GWLIST=$(cat $GWLIST | uniq)
-    NUMBERGW=$(cat $GWLIST | wc -l)
-    if [ $NUMBERGW -gt 0 ]; then
-      break
-    fi
-  done
-  if [ $NUMBERGW -lt 2 ]; then
-    GW=$(cat $GWLIST)
-    echo "DEFAUT GW: $GW"
-    ip route add default via $GW
-  else
-    BESTGW=""
-    BESTPACKETLOSS=100
-    while read line; do
-      ip route add default via $line
-      PACKETLOSS=$(ping -c 7 8.8.8.8 | grep -i loss | awk -F " packet loss" '{print $1}' | rev | awk '{print $1}' | rev | cut -d "%" -f 1)
-      if [ $PACKETLOSS -le $BESTPACKETLOSS ]; then
-        BESTPACKETLOSS=$PACKETLOSS
-        BESTGW=$line
+    ifconfig $INTERFACE $TEMPIP/24
+
+    #Gateway detection
+    NUMBERGW=0
+    ITERATION=0
+    while [[ $NUMBERGW -eq 0 || $ITERATION -le 2 ]]; do
+      nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=8.8.8.8' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
+      nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=9.9.9.9' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
+      nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=1.1.1.1' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
+      GWLIST=$(cat $GWLIST | uniq)
+      NUMBERGW=$(cat $GWLIST | wc -l)
+      if [ $NUMBERGW -gt 0 ]; then
+        break
       fi
-      ip route del default
-    done < $GWLIST
-    ip route add default via $BESTGW
-  fi
+      ITERATION=$(($ITERATION + 1))
+    done
+    if [ $NUMBERGW -lt 2 ]; then
+      BESTIP=$TEMPIP
+      BESTGW=$(cat $GWLIST)
+      #ip route add default via $GW
+    else
+      BESTGW=""
+      BESTPACKETLOSS=100
+      while read LINEGATEWAYS; do
+        ip route add default via $LINEGATEWAYS
+        PACKETLOSS=$(ping -c 7 8.8.8.8 | grep -i loss | awk -F " packet loss" '{print $1}' | rev | awk '{print $1}' | rev | cut -d "%" -f 1)
+        if [ $PACKETLOSS -lt $BESTPACKETLOSS ]; then
+          BESTPACKETLOSS=$PACKETLOSS
+          BESTGW=$LINEGATEWAYS
+          BESTIP=$TEMPIP
+        fi
+        ip route del default
+      done < $GWLIST
+    fi
+  done < $RANGESDETECTED
+  ifconfig $INTERFACE $BESTIP/24
+  ip route add default via $BESTGW
 fi
