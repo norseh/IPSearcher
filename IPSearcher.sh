@@ -66,13 +66,12 @@ if [[ ($APIPA == "169") || ($ADDRESS == "" ) ]]; then
       TEMPIP="$LINERANGES.$LAST"
       if [ $(cat $IPSDETECTED | grep -i $TEMPIP -c) -eq 0 ]; then
         VALID=1 # Unused IP address was detected
-        break
       fi
     done
 
     # If exist only one IP address (mac resolution) recognized, so we can
     # presume that this is the correct network to search an default gateway
-    if [[ $VALID -eq 1 ]]; then break; fi
+    #if [[ $VALID -eq 1 ]]; then break; fi
     ifconfig $INTERFACE $TEMPIP/24
 
     #Gateway detection
@@ -83,7 +82,7 @@ if [[ ($APIPA == "169") || ($ADDRESS == "" ) ]]; then
       nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=9.9.9.9' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
       nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=1.1.1.1' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
       GWLIST=$(cat $GWLIST | uniq)
-      NUMBERGW=$(cat $GWLIST | wc -l)
+      NUMBERGW=$(echo $GWLIST | wc -l)
       if [ $NUMBERGW -gt 0 ]; then
         break
       fi
@@ -91,7 +90,7 @@ if [[ ($APIPA == "169") || ($ADDRESS == "" ) ]]; then
     done
     if [ $NUMBERGW -lt 2 ]; then
       BESTIP=$TEMPIP
-      BESTGW=$(cat $GWLIST)
+      BESTGW=$(echo $GWLIST)
       #ip route add default via $GW
     else
       BESTGW=""
