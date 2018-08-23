@@ -16,6 +16,7 @@ TEMPARP="/tmp/tempARP.txt"
 RANGESDETECTED="/tmp/rangesDETECTED.txt"
 IPSDETECTED="/tmp/ipsDETECTED.txt"
 GWLIST="/tmp/gwLIST.txt"
+PACKETLOSS="/tmp/packetLOSS.txt"
 
 # Deletes the temp file with rapid networks (ARP resolution)
 if [ -f $RANGEFAST ]; then rm -rf $RANGEFAST; fi
@@ -25,6 +26,7 @@ if [ -f $TEMPARP ]; then rm -rf $TEMPARP; fi
 if [ -f $RANGESDETECTED ]; then rm -rf $RANGESDETECTED; fi
 if [ -f $IPSDETECTED ]; then rm -rf $IPSDETECTED; fi
 if [ -f $GWLIST ]; then rm -rf $GWLIST; fi
+if [ -f $PACKETLOSS ]; then rm -rf $PACKETLOSS; fi
 
 # Create files with Ranges
 echo $RANGE192 >> $RANGEFAST
@@ -48,7 +50,7 @@ if [[ ($APIPA == "169") || ($ADDRESS == "" ) ]]; then
   if [[ $NUMBERIPS -lt 1 ]]; then
     arp-scan -f $RANGESALL -B 7M -g -I $INTERFACE -q | awk '{print $1}' | tee $TEMPARP
   fi
-cat $TEMPARP | grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)" | awk -F "." '{print $1"."$2"."$3}' | uniq >> $RANGESDETECTED
+  cat $TEMPARP | grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)" | awk -F "." '{print $1"."$2"."$3}' | uniq >> $RANGESDETECTED
   cat $TEMPARP | grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)" >> $IPSDETECTED
   VALID=0
   while read line; do
@@ -82,14 +84,16 @@ cat $TEMPARP | grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-
   #done < $IPSDETECTED
   echo "IP Temp: $TEMPIP"
   NUMBERGW=0
-  while [ NUMBERGW -eq 0 ]; do
+  while [ $NUMBERGW -eq 0 ]; do
     nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=8.8.8.8' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
     nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=9.9.9.9' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
     nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=1.1.1.1' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
     NUMBERGW=$(cat $GWLIST | wc -l)
-    if [ $NUMBERGW -gt 0 ]; then break fi
+    if [ $NUMBERGW -gt 0 ]; then
+      break
+    fi
   done
-  if [ $NUMBERGW -le 2 ]; then
+  if [ $NUMBERGW -lt 2 ]; then
     GW=$(cat $GWLIST)
     echo "DEFAUT GW: $GW"
     ip route add default via $GW
@@ -98,11 +102,12 @@ cat $TEMPARP | grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-
     BESTPACKETLOSS=100
     while read line; do
       ip route add default via $line
-      PACKETLOSS=$(ping -c 7 8.8.8.8 | grep -i loss | awk '{print $6}' | cut -d "%" -f 1)
+      ping -c 7 8.8.8.8 | grep -i loss | awk '{print $6}' | cut -d "%" -f 1 >> $PACKETLOSS
+      echo $PACKETLOSS
       if [ $PACKETLOSS -le $BESTPACKETLOSS ]; then
         BESTPACKETLOSS=$PACKETLOSS
         BESTGW=$line
-      done
+      fi
       ip route del default
     done < $GWLIST
     ip route add default via $BESTGW
