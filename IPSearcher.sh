@@ -15,6 +15,7 @@ INTERFACEDUPLEX=$(ethtool eth0 | grep "Duplex: " | awk '{print $2}')
 TEMPARP="/tmp/tempARP.txt"
 RANGESDETECTED="/tmp/rangesDETECTED.txt"
 IPSDETECTED="/tmp/ipsDETECTED.txt"
+GWLIST="/tmp/gwLIST.txt"
 
 # Deletes the temp file with rapid networks (ARP resolution)
 if [ -f $RANGEFAST ]; then rm -rf $RANGEFAST; fi
@@ -23,6 +24,7 @@ if [ -f $RANGESALL ]; then rm -rf $RANGESALL; fi
 if [ -f $TEMPARP ]; then rm -rf $TEMPARP; fi
 if [ -f $RANGESDETECTED ]; then rm -rf $RANGESDETECTED; fi
 if [ -f $IPSDETECTED ]; then rm -rf $IPSDETECTED; fi
+if [ -f $GWLIST ]; then rm -rf $GWLIST; fi
 
 # Create files with Ranges
 echo $RANGE192 >> $RANGEFAST
@@ -79,7 +81,30 @@ cat $TEMPARP | grep -E -o "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-
   #  fi
   #done < $IPSDETECTED
   echo "IP Temp: $TEMPIP"
-  GW=$(nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=8.8.8.8' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}')
-  echo "DEFAUT GW: $GW"
-  ip route add default via $GW
+  NUMBERGW=0
+  while [ NUMBERGW -eq 0 ]; do
+    nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=8.8.8.8' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
+    nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=9.9.9.9' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
+    nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=1.1.1.1' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
+    NUMBERGW=$(cat $GWLIST | wc -l)
+    if [ $NUMBERGW -gt 0 ]; then break fi
+  done
+  if [ $NUMBERGW -le 2 ]; then
+    GW=$(cat $GWLIST)
+    echo "DEFAUT GW: $GW"
+    ip route add default via $GW
+  else
+    BESTGW=""
+    BESTPACKETLOSS=100
+    while read line; do
+      ip route add default via $line
+      PACKETLOSS=$(ping -c 7 8.8.8.8 | grep -i loss | awk '{print $6}' | cut -d "%" -f 1)
+      if [ $PACKETLOSS -le $BESTPACKETLOSS ]; then
+        BESTPACKETLOSS=$PACKETLOSS
+        BESTGW=$line
+      done
+      ip route del default
+    done < $GWLIST
+    ip route add default via $BESTGW
+  fi
 fi
