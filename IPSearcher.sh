@@ -16,7 +16,6 @@ TEMPARP="/tmp/tempARP.txt"
 RANGESDETECTED="/tmp/rangesDETECTED.txt"
 IPSDETECTED="/tmp/ipsDETECTED.txt"
 GWLIST="/tmp/gwLIST.txt"
-PACKETLOSS="/tmp/packetLOSS.txt"
 
 # Deletes the temp file with rapid networks (ARP resolution)
 if [ -f $RANGEFAST ]; then rm -rf $RANGEFAST; fi
@@ -26,7 +25,6 @@ if [ -f $TEMPARP ]; then rm -rf $TEMPARP; fi
 if [ -f $RANGESDETECTED ]; then rm -rf $RANGESDETECTED; fi
 if [ -f $IPSDETECTED ]; then rm -rf $IPSDETECTED; fi
 if [ -f $GWLIST ]; then rm -rf $GWLIST; fi
-if [ -f $PACKETLOSS ]; then rm -rf $PACKETLOSS; fi
 
 # Create files with Ranges
 echo $RANGE192 >> $RANGEFAST
@@ -88,6 +86,7 @@ if [[ ($APIPA == "169") || ($ADDRESS == "" ) ]]; then
     nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=8.8.8.8' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
     nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=9.9.9.9' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
     nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=1.1.1.1' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
+    GWLIST=$(cat $GWLIST | uniq)
     NUMBERGW=$(cat $GWLIST | wc -l)
     if [ $NUMBERGW -gt 0 ]; then
       break
@@ -102,8 +101,7 @@ if [[ ($APIPA == "169") || ($ADDRESS == "" ) ]]; then
     BESTPACKETLOSS=100
     while read line; do
       ip route add default via $line
-      ping -c 7 8.8.8.8 | grep -i loss | awk '{print $6}' | cut -d "%" -f 1 >> $PACKETLOSS
-      echo $PACKETLOSS
+      PACKETLOSS=$(ping -c 7 8.8.8.8 | grep -i loss | awk -F " packet loss" '{print $1}' | rev | awk '{print $1}' | rev | cut -d "%" -f 1)
       if [ $PACKETLOSS -le $BESTPACKETLOSS ]; then
         BESTPACKETLOSS=$PACKETLOSS
         BESTGW=$line
