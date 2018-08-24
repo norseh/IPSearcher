@@ -15,7 +15,7 @@ INTERFACEDUPLEX=$(ethtool eth0 | grep "Duplex: " | awk '{print $2}')
 TEMPARP="/tmp/tempARP.txt"
 RANGESDETECTED="/tmp/rangesDETECTED.txt"
 IPSDETECTED="/tmp/ipsDETECTED.txt"
-GWLIST="/tmp/gwLIST.txt"
+GWFILELIST="/tmp/gwFILELIST.txt"
 
 # Deletes the temp files
 if [ -f $RANGEFAST ]; then rm -rf $RANGEFAST; fi
@@ -24,7 +24,7 @@ if [ -f $RANGESALL ]; then rm -rf $RANGESALL; fi
 if [ -f $TEMPARP ]; then rm -rf $TEMPARP; fi
 if [ -f $RANGESDETECTED ]; then rm -rf $RANGESDETECTED; fi
 if [ -f $IPSDETECTED ]; then rm -rf $IPSDETECTED; fi
-if [ -f $GWLIST ]; then rm -rf $GWLIST; fi
+if [ -f $GWFILELIST ]; then rm -rf $GWFILELIST; fi
 
 # Create files with Ranges
 echo $RANGE192 >> $RANGEFAST
@@ -78,10 +78,12 @@ if [[ ($APIPA == "169") || ($ADDRESS == "" ) ]]; then
     NUMBERGW=0
     ITERATION=0
     while [[ $NUMBERGW -eq 0 || $ITERATION -le 2 ]]; do
-      nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=8.8.8.8' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
-      nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=9.9.9.9' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
-      nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=1.1.1.1' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' >> $GWLIST
-      GWLIST=$(cat $GWLIST | uniq)
+      nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=8.8.8.8' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' | tee $GWFILELIST
+      nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=9.9.9.9' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' | tee $GWFILELIST
+      nmap -sn $TEMPIP/24 --script ip-forwarding --script-args='target=1.1.1.1' | grep -i " has ip " -B 6 | grep -i nmap | awk '{print $5}' | tee $GWFILELIST
+      cat $GWFILELIST | uniq
+      GWLIST=$(cat $GWFILELIST | uniq)
+      echo $GWLIST | wc -l
       NUMBERGW=$(echo $GWLIST | wc -l)
       if [ $NUMBERGW -gt 0 ]; then
         break
@@ -90,8 +92,8 @@ if [[ ($APIPA == "169") || ($ADDRESS == "" ) ]]; then
     done
     if [ $NUMBERGW -lt 2 ]; then
       BESTIP=$TEMPIP
-      BESTGW=$(echo $GWLIST)
-      #ip route add default via $GW
+      BESTGW=$GWLIST
+
     else
       BESTGW=""
       BESTPACKETLOSS=100
